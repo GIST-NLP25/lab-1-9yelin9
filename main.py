@@ -1,48 +1,77 @@
-import torch
 import numpy as np
 import pandas as pd
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader
+
+from data import SimpleSeqDataset
+from model import ThreeLayerNet
 
 STUDENT_ID = "20242056"
 N_CLASS = 19
 MAX_LEN = 20
 
-def load_data(fn, token_dict=None):
-	# Load sequence
-	data, target = [list(filter(None, line.strip().split(','))) for line in open(fn, 'r')], []
+if torch.cuda.is_available():
+	torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
-	if token_dict: # Replace all unknown tokens to 'UNK'
-		token_set = set(token_dict)
-		data = [[word if word in token_set else 'UNK' for word in sample] for sample in data]
-	else: # Gen dictionary
-		data, target = zip(*[(sample[:-1], sample[-1]) for sample in data])
-		token_list = list(np.unique(sum(data, []))) + ['UNK']
-		token_dict = {token:i for i, token in enumerate(token_list)}
+def train(train_loader, model, loss_fn, optimizer, scheduler, n_epoch=100, tol=1e-6):
+	print(f'------ Train (n_epoch={n_epoch}, tol={tol}) ------')
+	print('%6s%14s%14s' % ('epoch', 'loss_epoch', 'delta'))
 
-	# Transform sequence to one-hot representation and add padding
-	I = np.eye(len(token_dict))
-	data = [np.pad(I[[token_dict[word] for word in sample[:MAX_LEN]]],\
-			pad_width=((0, max(0, MAX_LEN - len(sample))), (0, 0)))\
-			for sample in data]
+	loss_epoch_old, delta = 100, 100
+	for epoch in range(n_epoch):
+		loss_epoch = 0
+		for x, y in train_loader:
+			optimizer.zero_grad()
+			y_pred = model(x)
+			loss = loss_fn(y_pred, y)
+			loss.backward()
+			loss_epoch += loss.item()
+			optimizer.step()
+		scheduler.step()
 
-	# Vectorize
-	data = torch.tensor(data, requires_grad=True).flatten(start_dim=1)
+		loss_epoch /= len(train_loader)
+		delta = abs(loss_epoch - loss_epoch_old)
+		print(f'{epoch:6d}{loss_epoch:14f}{delta:14f}')
+		if delta < tol: break
+		else: loss_epoch_old = loss_epoch
 
-	return data, target, token_dict
+	print(f'--------------------------------------------', end='\n\n')
 
-def save_data(df1, df2):
-	# EXAMPLE
-	# Save the data to a csv file
-	# You can change function
-	# BUT you should keep the file name as "{STUDENT_ID}_simple_seq.p#.answer.csv"
-	df1.to_csv(f'{STUDENT_ID}_simple_seq.p1.answer.csv')
-	df2.to_csv(f'{STUDENT_ID}_simple_seq.p2.answer.csv')
+def test(test_loader, model, label_dict):
+	label_dict_inv = {v:k for k, v in label_dict.items()}
+	model.eval()
+
+	df = []
+	with torch.no_grad():
+		for i, (x, _) in enumerate(test_loader):
+			y_pred = model(x)
+			df.append([f'S{i:03d}', label_dict_inv[y_pred.argmax(dim=1).item()]])
+	df = pd.DataFrame(df, columns=['id', 'pred'])
+	
+	return df
 
 def main():
-	#save_data(df1, df2)
-	train_data, train_target, token_dict = load_data('./dataset/simple_seq.train.csv')
-	test_data, _, _ = load_data('./dataset/simple_seq.test.csv', token_dict=token_dict)
+	print('Load Data...', end=' ')
+	train_dset = SimpleSeqDataset('./dataset/simple_seq.train.csv', max_len=MAX_LEN)
+	test_dset  = SimpleSeqDataset('./dataset/simple_seq.test.csv',  max_len=MAX_LEN, token_dict=train_dset.token_dict)
+	print('Done', end='\n\n')
 
-	
+	train_loader = DataLoader(train_dset, batch_size=16, shuffle=True,  drop_last=False)
+	test_loader  = DataLoader(test_dset,  batch_size=1,  shuffle=False, drop_last=False)
+
+	model = ThreeLayerNet(train_dset.data.shape[1], 1000, 100, N_CLASS)
+	loss_fn = nn.CrossEntropyLoss()
+
+	optimizer = optim.SGD(model.parameters(), lr=1e-1)
+	scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
+
+	train(train_loader, model, loss_fn, optimizer, scheduler, n_epoch=100, tol=1e-3)
+	df1 = test(test_loader, model, train_dset.label_dict)
+	print(df1)
+	df1.to_csv(f'{STUDENT_ID}_simple_seq.p1.answer.csv')
 
 if __name__ == "__main__":
 	main()
