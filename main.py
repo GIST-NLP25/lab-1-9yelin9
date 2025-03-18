@@ -59,16 +59,15 @@ def main():
 	test_dset  = SimpleSeqDataset('./dataset/simple_seq.test.csv',  max_len=MAX_LEN, token_dict=train_dset.token_dict)
 	print('Done', end='\n\n')
 
-	train_loader = DataLoader(train_dset, batch_size=16, shuffle=True,  drop_last=False)
+	train_loader = DataLoader(train_dset, batch_size=16, shuffle=True,  drop_last=True)
 	test_loader  = DataLoader(test_dset,  batch_size=1,  shuffle=False, drop_last=False)
 
 	model = ThreeLayerNet(train_dset.data.shape[1], 1000, 100, N_CLASS)
 	loss_fn = nn.CrossEntropyLoss()
-
 	optimizer = optim.SGD(model.parameters(), lr=1e-1)
-	scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
+	scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10, eta_min=1e-2)
 
-	train(train_loader, model, loss_fn, optimizer, scheduler, n_epoch=100, tol=1e-3)
+	train(train_loader, model, loss_fn, optimizer, scheduler, n_epoch=100, tol=1e-6)
 	df1 = test(test_loader, model, train_dset.label_dict)
 	df1.to_csv(f'{STUDENT_ID}_simple_seq.p1.answer.csv', index=False)
 
