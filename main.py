@@ -48,7 +48,7 @@ def test(test_loader, model, label_dict):
 	with torch.no_grad():
 		for i, (x, _) in enumerate(test_loader):
 			y_pred = model(x)
-			df.append([f'S{i:03d}', label_dict_inv[y_pred.argmax(dim=1).item()]])
+			df.append([f'S{i+1:03d}', label_dict_inv[y_pred.argmax(dim=1).item()]])
 	df = pd.DataFrame(df, columns=['id', 'pred'])
 	
 	return df
