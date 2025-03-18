@@ -70,8 +70,7 @@ def main():
 
 	train(train_loader, model, loss_fn, optimizer, scheduler, n_epoch=100, tol=1e-3)
 	df1 = test(test_loader, model, train_dset.label_dict)
-	print(df1)
-	df1.to_csv(f'{STUDENT_ID}_simple_seq.p1.answer.csv')
+	df1.to_csv(f'{STUDENT_ID}_simple_seq.p1.answer.csv', index=False)
 
 if __name__ == "__main__":
 	main()
