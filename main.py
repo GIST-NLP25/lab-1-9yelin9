@@ -77,8 +77,8 @@ def main():
 		model = ThreeLayerNetWordEmb(MAX_LEN, EMB_DIM, len(train_dset.token_dict), 1000, 100, N_CLASS)
 
 	loss_fn = nn.CrossEntropyLoss()
-	optimizer = optim.SGD(model.parameters(), lr=1e-1, weight_decay=0.99)
-	scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
+	optimizer = optim.SGD(model.parameters(), lr=1e-1)
+	scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-3, max_lr=1e-1)
 
 	train(train_loader, model, loss_fn, optimizer, scheduler, n_epoch=1000, tol=1e-6, pat=3)
 	df = test(test_loader, model, train_dset.label_dict)
