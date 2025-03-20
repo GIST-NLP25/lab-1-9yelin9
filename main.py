@@ -68,8 +68,8 @@ def main():
 	test_dset  = SimpleSeqDataset('./dataset/simple_seq.test.csv',  max_len=MAX_LEN, onehot=args.onehot, token_dict=train_dset.token_dict)
 	print('Done', end='\n\n')
 
-	train_loader = DataLoader(train_dset, batch_size=16, shuffle=True,  drop_last=True)
-	test_loader  = DataLoader(test_dset,  batch_size=1,  shuffle=False, drop_last=False)
+	train_loader = DataLoader(train_dset, batch_size=8, shuffle=True, drop_last=True)
+	test_loader  = DataLoader(test_dset, batch_size=1, shuffle=False, drop_last=False)
 
 	if args.onehot:
 		model = ThreeLayerNetOneHot(MAX_LEN, len(train_dset.token_dict), 1000, 100, N_CLASS)
@@ -77,10 +77,10 @@ def main():
 		model = ThreeLayerNetWordEmb(MAX_LEN, EMB_DIM, len(train_dset.token_dict), 1000, 100, N_CLASS)
 
 	loss_fn = nn.CrossEntropyLoss()
-	optimizer = optim.SGD(model.parameters(), lr=1e-1)
+	optimizer = optim.SGD(model.parameters(), lr=1e-1, weight_decay=0.99)
 	scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
 
-	train(train_loader, model, loss_fn, optimizer, scheduler, n_epoch=1000, tol=1e-4, pat=3)
+	train(train_loader, model, loss_fn, optimizer, scheduler, n_epoch=1000, tol=1e-6, pat=3)
 	df = test(test_loader, model, train_dset.label_dict)
 	df.to_csv(f'{STUDENT_ID}_simple_seq.p{2-args.onehot}.answer.csv', index=False)
 
