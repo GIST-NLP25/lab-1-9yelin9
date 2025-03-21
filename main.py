@@ -91,7 +91,7 @@ def main():
 	else:
 		model = ThreeLayerNetWordEmb(MAX_LEN, EMB_DIM, len(token_dict), 1000, 100, N_CLASS)
 
-	loss_fn = nn.CrossEntropyLoss(torch.tensor(list(class_weight.values())))
+	loss_fn = nn.CrossEntropyLoss()
 	#optimizer = optim.SGD(model.parameters(), lr=1e-1)
 	optimizer = optim.Adam(model.parameters(), lr=1e-2)
 	scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
