@@ -16,7 +16,7 @@ class SimpleSeqDataset(Dataset):
 			label = np.zeros(len(data))
 		else: # Gen dictionary
 			data, label = zip(*[(sample[:-1], sample[-1]) for sample in data])
-			self.token_dict = {token:i for i, token in enumerate(['PAD'] + list(np.unique(sum(data, []))) + ['UNK'])}
+			self.token_dict = {token:i for i, token in enumerate(['PAD', 'UNK'] + list(np.unique(sum(data, []))))}
 			self.label_dict = {label:i for i, label in enumerate(np.unique(label))}
 			label = [self.label_dict[l] for l in label]
 		self.label = torch.tensor(label, dtype=torch.long)

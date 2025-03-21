@@ -1,11 +1,12 @@
 import argparse
 import numpy as np
 import pandas as pd
+from collections import Counter
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 
 from data import SimpleSeqDataset
 from model import ThreeLayerNetOneHot, ThreeLayerNetWordEmb
@@ -31,14 +32,13 @@ def train(train_loader, model, loss_fn, optimizer, scheduler, n_epoch=100, tol=1
 		acc, loss = 0, 0
 		for x, y in train_loader:
 			optimizer.zero_grad()
-
 			y_pred = model(x)
 
 			acc_batch = (y_pred.argmax(dim=1) == y).float().mean()
+			acc += acc_batch.item()
+
 			loss_batch = loss_fn(y_pred, y)
 			loss_batch.backward()
-
-			acc += acc_batch.item()
 			loss += loss_batch.item()
 
 			optimizer.step()
@@ -58,9 +58,9 @@ def train(train_loader, model, loss_fn, optimizer, scheduler, n_epoch=100, tol=1
 
 def test(test_loader, model, label_dict):
 	label_dict_inv = {v:k for k, v in label_dict.items()}
-	model.eval()
 
 	df = []
+	model.eval()
 	with torch.no_grad():
 		for i, (x, _) in enumerate(test_loader, start=1):
 			y_pred = model(x)
@@ -72,24 +72,33 @@ def test(test_loader, model, label_dict):
 def main():
 	print('Load Data...', end=' ')
 	train_dset = SimpleSeqDataset('./dataset/simple_seq.train.csv', max_len=MAX_LEN, onehot=args.onehot)
-	test_dset  = SimpleSeqDataset('./dataset/simple_seq.test.csv',  max_len=MAX_LEN, onehot=args.onehot, token_dict=train_dset.token_dict)
+	token_dict, label_dict = train_dset.token_dict, train_dset.label_dict
+	test_dset = SimpleSeqDataset('./dataset/simple_seq.test.csv', max_len=MAX_LEN, onehot=args.onehot, token_dict=token_dict)
 	print('Done', end='\n\n')
 
-	train_loader = DataLoader(train_dset, batch_size=8, shuffle=True, drop_last=True)
-	test_loader  = DataLoader(test_dset, batch_size=1, shuffle=False, drop_last=False)
+	# Class weight to deal with imbalance
+	class_cnt = dict(sorted(Counter(train_dset.label.to('cpu').numpy()).items()))
+	class_weight = {k: 1. / v for k, v in class_cnt.items()}
+	sample_weight = torch.tensor([class_weight[label] for label in train_dset.label.to('cpu').numpy()])
+	sampler = WeightedRandomSampler(sample_weight, len(sample_weight))
+	#print(class_cnt, class_weight, sep='\n', end='\n\n')
+
+	train_loader = DataLoader(train_dset, batch_size=8, drop_last=True, sampler=sampler)
+	test_loader = DataLoader(test_dset, batch_size=1, drop_last=False, shuffle=False)
 
 	if args.onehot:
-		model = ThreeLayerNetOneHot(MAX_LEN, len(train_dset.token_dict), 1000, 100, N_CLASS)
+		model = ThreeLayerNetOneHot(MAX_LEN, len(token_dict), 1000, 100, N_CLASS)
 	else:
-		model = ThreeLayerNetWordEmb(MAX_LEN, EMB_DIM, len(train_dset.token_dict), 1000, 100, N_CLASS)
+		model = ThreeLayerNetWordEmb(MAX_LEN, EMB_DIM, len(token_dict), 1000, 100, N_CLASS)
 
-	loss_fn = nn.CrossEntropyLoss()
+	loss_fn = nn.CrossEntropyLoss(torch.tensor(list(class_weight.values())))
 	#optimizer = optim.SGD(model.parameters(), lr=1e-1)
 	optimizer = optim.Adam(model.parameters(), lr=1e-2)
 	scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
+	
+	train(train_loader, model, loss_fn, optimizer, scheduler, n_epoch=100, tol=1e-5, pat=3)
 
-	train(train_loader, model, loss_fn, optimizer, scheduler, n_epoch=1000, tol=1e-5, pat=3)
-	df = test(test_loader, model, train_dset.label_dict)
+	df = test(test_loader, model, label_dict)
 	df.to_csv(f'{STUDENT_ID}_simple_seq.p{2-args.onehot}.answer.csv', index=False)
 
 if __name__ == "__main__":
